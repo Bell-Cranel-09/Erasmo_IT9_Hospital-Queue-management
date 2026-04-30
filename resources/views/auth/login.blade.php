@@ -50,7 +50,7 @@
         </div>
     </div>
 
-    {{-- Password — label and forgot password on the same line --}}
+    {{-- Password + Forgot on same line --}}
     <div>
         <div class="flex items-center justify-between mb-1.5">
             <label for="login-password" class="text-sm font-medium text-slate-700">Password</label>
@@ -93,14 +93,16 @@
     </div>
 
     <button type="submit"
-            class="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-2.5 px-4 rounded-xl transition-all shadow-lg shadow-blue-500/25 hover:-translate-y-0.5 active:translate-y-0 text-sm">
+            class="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-2.5 px-4 rounded-xl transition-all shadow-lg shadow-blue-500/25 hover:-translate-y-0.5 text-sm">
         Sign In
     </button>
 </form>
 
 <div class="mt-6 pt-5 border-t border-slate-100 text-center">
     <p class="text-sm text-slate-500">
-        New patient? <a href="{{ route('register') }}" class="text-blue-600 hover:text-blue-700 font-medium">Create an account</a>
+        New patient?
+        {{-- Points to the PUBLIC register route --}}
+        <a href="{{ route('patients.create') }}" class="text-blue-600 hover:text-blue-700 font-medium">Create an account</a>
     </p>
 </div>
 

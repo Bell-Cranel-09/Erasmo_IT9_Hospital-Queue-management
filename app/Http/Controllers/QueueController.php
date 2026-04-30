@@ -82,18 +82,21 @@ class QueueController extends Controller
     }
 
     /**
-     * Remove a patient from the queue (admin/staff only).
+     * SOFT DELETE — marks queue entry as "skipped", data is NOT deleted.
+     * The queue record stays in the database for reporting/audit purposes.
      */
     public function destroy(Queue $queue)
     {
-        // Only admin and staff can delete queue entries
         if (!auth()->user()->isAdmin() && !auth()->user()->isStaff()) {
             return back()->with('error', 'Unauthorized action.');
         }
 
-        $code = $queue->queue_code;
-        $queue->delete();
+        // Mark as skipped — does NOT delete the record
+        $queue->update([
+            'status'  => 'skipped',
+            'done_at' => now(),
+        ]);
 
-        return back()->with('success', "Queue entry {$code} has been removed.");
+        return back()->with('success', "Queue {$queue->queue_code} ({$queue->patient->full_name}) marked as skipped. Record preserved.");
     }
 }

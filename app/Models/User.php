@@ -26,13 +26,34 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'is_active'         => 'boolean',
-        // NOTE: 'password' => 'hashed' is intentionally NOT here
+        // !! 'password' => 'hashed' is intentionally REMOVED
+        // Having it causes double-hashing which breaks login
     ];
 
-    public function patient() { return $this->hasOne(Patient::class); }
-    public function doctor()  { return $this->hasOne(Doctor::class); }
+    // ── Relationships ──────────────────────────────────────────────────────
+    public function patient()
+    {
+        return $this->hasOne(Patient::class);
+    }
 
-    public function isAdmin(): bool   { return $this->role === 'admin'; }
-    public function isStaff(): bool   { return $this->role === 'staff'; }
-    public function isPatient(): bool { return $this->role === 'patient'; }
+    public function doctor()
+    {
+        return $this->hasOne(Doctor::class);
+    }
+
+    // ── Role helpers ───────────────────────────────────────────────────────
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function isStaff(): bool
+    {
+        return $this->role === 'staff';
+    }
+
+    public function isPatient(): bool
+    {
+        return $this->role === 'patient';
+    }
 }

@@ -7,7 +7,7 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-    {{-- ── LEFT COLUMN ──────────────────────────────────────────────── --}}
+    {{-- ── LEFT: Stats + Actions ────────────────────────────────────── --}}
     <div class="space-y-4">
 
         {{-- Now Serving display --}}
@@ -45,12 +45,20 @@
                     <p class="text-xs text-slate-600 font-medium">Total</p>
                 </div>
             </div>
+
+            {{-- Skipped count --}}
+            @if($stats['skipped'] > 0)
+            <div class="mt-3 bg-orange-50 rounded-xl p-2.5 text-center">
+                <p class="text-sm font-bold text-orange-600">{{ $stats['skipped'] }} Skipped</p>
+                <p class="text-xs text-orange-400">Records preserved</p>
+            </div>
+            @endif
         </div>
 
-        {{-- Staff actions --}}
+        {{-- Staff/Admin actions --}}
         @if(auth()->user()->isAdmin() || auth()->user()->isStaff())
 
-        {{-- Call Next --}}
+        {{-- Call Next button --}}
         <form method="POST" action="{{ route('queue.call-next', $department) }}">
             @csrf
             <button type="submit"
@@ -63,7 +71,7 @@
             </button>
         </form>
 
-        {{-- Add walk-in --}}
+        {{-- Add Walk-in --}}
         <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
             <h3 class="text-sm font-semibold text-slate-700 mb-4">Add Walk-in Patient</h3>
             <form method="POST" action="{{ route('queue.join') }}" class="space-y-3">
@@ -101,7 +109,7 @@
         @endif
     </div>
 
-    {{-- ── RIGHT COLUMN: Queue list ──────────────────────────────────── --}}
+    {{-- ── RIGHT: Queue List ─────────────────────────────────────────── --}}
     <div class="lg:col-span-2">
         <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
 
@@ -123,7 +131,6 @@
                 </form>
             </div>
 
-            {{-- Queue rows --}}
             @if($queues->isEmpty())
             <div class="text-center py-16">
                 <div class="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
@@ -138,17 +145,19 @@
             <div class="divide-y divide-slate-50">
                 @foreach($queues as $queue)
                 <div class="flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors
-                            {{ $queue->status === 'serving' ? 'bg-blue-50/60 border-l-4 border-l-blue-500' : '' }}">
+                            {{ $queue->status === 'serving'  ? 'bg-blue-50/60 border-l-4 border-l-blue-500' : '' }}
+                            {{ $queue->status === 'skipped'  ? 'opacity-50' : '' }}">
 
-                    {{-- Number badge --}}
+                    {{-- Queue number --}}
                     <div class="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 font-bold text-lg
-                                {{ $queue->status === 'serving' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-100 text-slate-600' }}">
+                                {{ $queue->status === 'serving' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' :
+                                   ($queue->status === 'skipped' ? 'bg-slate-200 text-slate-400' : 'bg-slate-100 text-slate-600') }}">
                         {{ $queue->queue_number }}
                     </div>
 
                     {{-- Patient info --}}
                     <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2 flex-wrap">
                             <p class="text-sm font-semibold text-slate-800 truncate">{{ $queue->patient->full_name }}</p>
                             @if($queue->status === 'serving')
                                 <span class="flex items-center gap-1 text-xs text-blue-600 font-medium">
@@ -159,7 +168,8 @@
                         </div>
                         <p class="text-xs text-slate-500 mt-0.5">
                             {{ $queue->queue_code }}
-                            @if($queue->called_at)· Called {{ $queue->called_at->format('h:i A') }}@endif
+                            @if($queue->called_at) · Called {{ $queue->called_at->format('h:i A') }} @endif
+                            @if($queue->status === 'skipped') · <span class="text-orange-500">Skipped (record kept)</span> @endif
                         </p>
                     </div>
 
@@ -168,18 +178,18 @@
                         {{ $queue->status }}
                     </span>
 
-                    {{-- Delete button (admin/staff only) --}}
-                    @if(auth()->user()->isAdmin() || auth()->user()->isStaff())
+                    {{-- Skip button (admin/staff only, only for waiting patients) --}}
+                    @if((auth()->user()->isAdmin() || auth()->user()->isStaff()) && $queue->status === 'waiting')
                     <form method="POST" action="{{ route('queue.destroy', $queue) }}"
-                          onsubmit="return confirm('Remove {{ $queue->patient->full_name }} from queue?')">
+                          onsubmit="return confirm('Skip {{ $queue->patient->full_name }}? The record will be kept in the system.')">
                         @csrf
                         @method('DELETE')
                         <button type="submit"
-                                class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all flex-shrink-0"
-                                title="Remove from queue">
+                                class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-orange-500 hover:bg-orange-50 transition-all flex-shrink-0"
+                                title="Skip patient (record preserved)">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                      d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z"/>
                             </svg>
                         </button>
                     </form>
@@ -187,9 +197,21 @@
                 </div>
                 @endforeach
             </div>
+
+            {{-- Footer note --}}
+            <div class="px-5 py-3 bg-slate-50 border-t border-slate-100">
+                <p class="text-xs text-slate-400 flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Skipping a patient marks them as skipped — no data is deleted.
+                </p>
+            </div>
             @endif
         </div>
     </div>
+
 </div>
 
 @push('scripts')

@@ -12,9 +12,6 @@ use Illuminate\Support\Facades\Hash;
 
 class DoctorController extends Controller
 {
-    /**
-     * List all doctors — passes $departments for the Add Doctor modal.
-     */
     public function index()
     {
         $doctors     = Doctor::with(['department', 'user', 'schedules'])->paginate(15);
@@ -23,9 +20,6 @@ class DoctorController extends Controller
         return view('doctors.index', compact('doctors', 'departments'));
     }
 
-    /**
-     * Store a new doctor (admin only).
-     */
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -46,13 +40,10 @@ class DoctorController extends Controller
                 'role'     => 'staff',
             ]);
 
-            $count      = Doctor::count() + 1;
-            $doctorCode = 'DOC-' . str_pad($count, 3, '0', STR_PAD_LEFT);
-
             Doctor::create([
                 'user_id'        => $user->id,
                 'department_id'  => $data['department_id'],
-                'doctor_code'    => $doctorCode,
+                'doctor_code'    => 'DOC-' . str_pad(Doctor::count() + 1, 3, '0', STR_PAD_LEFT),
                 'first_name'     => $data['first_name'],
                 'last_name'      => $data['last_name'],
                 'specialization' => $data['specialization'],
@@ -61,24 +52,18 @@ class DoctorController extends Controller
             ]);
         });
 
-        return redirect()->route('doctors.index')
-            ->with('success', 'Doctor added successfully.');
+        return redirect()->route('doctors.index')->with('success', 'Doctor added successfully.');
     }
 
-    /**
-     * Show schedule management page for a doctor.
-     */
     public function schedules(Doctor $doctor)
     {
-        $schedules = $doctor->schedules()->orderBy('day_of_week')->get();
+        // Load ALL schedules including inactive so staff can see history & restore
+        $schedules = $doctor->schedules()->orderBy('is_active', 'desc')->orderBy('day_of_week')->get();
         $days      = DoctorSchedule::DAYS;
 
         return view('doctors.schedules', compact('doctor', 'schedules', 'days'));
     }
 
-    /**
-     * Save a new schedule slot for a doctor.
-     */
     public function storeSchedule(Request $request, Doctor $doctor)
     {
         $data = $request->validate([
@@ -89,18 +74,58 @@ class DoctorController extends Controller
             'max_patients'          => 'required|integer|min:1|max:100',
         ]);
 
-        // Check if doctor already has an active schedule on this day
-        $overlap = DoctorSchedule::where('doctor_id', $doctor->id)
+        $exists = DoctorSchedule::where('doctor_id', $doctor->id)
             ->where('day_of_week', $data['day_of_week'])
             ->where('is_active', true)
             ->exists();
 
-        if ($overlap) {
-            return back()->with('error', 'This doctor already has an active schedule on that day.');
+        if ($exists) {
+            return back()->with('error', 'An active schedule already exists for this day. Deactivate it first.');
         }
 
         $doctor->schedules()->create($data);
 
         return back()->with('success', 'Schedule added successfully.');
+    }
+
+    /**
+     * Deactivate a schedule (soft delete).
+     * Sets is_active = false. Data and linked appointments are fully preserved.
+     */
+    public function destroySchedule(Doctor $doctor, DoctorSchedule $schedule)
+    {
+        if ($schedule->doctor_id !== $doctor->id) {
+            return back()->with('error', 'Schedule does not belong to this doctor.');
+        }
+
+        $schedule->update(['is_active' => false]);
+
+        return back()->with('success', "{$schedule->day_name} schedule deactivated. All data preserved.");
+    }
+
+    /**
+     * Restore a deactivated schedule.
+     * Sets is_active = true again.
+     */
+    public function restoreSchedule(Doctor $doctor, DoctorSchedule $schedule)
+    {
+        if ($schedule->doctor_id !== $doctor->id) {
+            return back()->with('error', 'Schedule does not belong to this doctor.');
+        }
+
+        // Check no other active schedule exists for this day first
+        $conflict = DoctorSchedule::where('doctor_id', $doctor->id)
+            ->where('day_of_week', $schedule->day_of_week)
+            ->where('is_active', true)
+            ->where('id', '!=', $schedule->id)
+            ->exists();
+
+        if ($conflict) {
+            return back()->with('error', 'Another active schedule already exists for this day.');
+        }
+
+        $schedule->update(['is_active' => true]);
+
+        return back()->with('success', "{$schedule->day_name} schedule restored successfully.");
     }
 }
