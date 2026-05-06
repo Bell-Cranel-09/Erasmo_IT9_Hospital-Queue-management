@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('layouts.auth')
 
 @section('title', 'Register Patient – St. Gabriel Medical Center')
 @section('page-title', 'Register Patient')

@@ -22,7 +22,6 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
-    // Shortcut: patient views their own profile (show page, not edit)
     Route::get('/my-profile', function () {
         $patient = auth()->user()->patient;
         if (!$patient) return redirect()->route('dashboard')->with('error', 'No patient profile found.');
@@ -51,21 +50,35 @@ Route::middleware(['auth'])->group(function () {
 
     // ── Doctors ───────────────────────────────────────────────────────────
     Route::prefix('doctors')->name('doctors.')->group(function () {
-        Route::get('/',                                        [DoctorController::class, 'index'])->name('index');
-        Route::post('/',                                       [DoctorController::class, 'store'])->name('store');
+        Route::get('/',  [DoctorController::class, 'index'])->name('index');
+        Route::post('/', [DoctorController::class, 'store'])->name('store');
+
+        Route::get('/trashed',              [DoctorController::class, 'trashed'])->name('trashed');
+        Route::patch('/{id}/restore',       [DoctorController::class, 'restore'])->name('restore');
+
         Route::get('/{doctor}/schedules',                      [DoctorController::class, 'schedules'])->name('schedules');
         Route::post('/{doctor}/schedules',                     [DoctorController::class, 'storeSchedule'])->name('schedules.store');
         Route::delete('/{doctor}/schedules/{schedule}',        [DoctorController::class, 'destroySchedule'])->name('schedules.destroy');
         Route::patch('/{doctor}/schedules/{schedule}/restore', [DoctorController::class, 'restoreSchedule'])->name('schedules.restore');
+
+        Route::delete('/{id}',              [DoctorController::class, 'destroy'])->name('destroy');
     });
 
     // ── Patients ──────────────────────────────────────────────────────────
     Route::prefix('patients')->name('patients.')->group(function () {
-        Route::get('/',               [PatientController::class, 'index'])->name('index');
-        Route::get('/{patient}',      [PatientController::class, 'show'])->name('show');
-        Route::get('/{patient}/edit', [PatientController::class, 'edit'])->name('edit');
-        Route::put('/{patient}',      [PatientController::class, 'update'])->name('update');
-        Route::delete('/{patient}',   [PatientController::class, 'destroy'])->name('destroy');
+        Route::get('/',  [PatientController::class, 'index'])->name('index');
+
+        // Static routes MUST come before /{patient} wildcard
+        Route::get('/trashed',          [PatientController::class, 'trashed'])->name('trashed');
+        Route::get('/archives',         [PatientController::class, 'archives'])->name('archives');
+        Route::patch('/{id}/restore',   [PatientController::class, 'restore'])->name('restore');
+        Route::delete('/{id}/archive',  [PatientController::class, 'archive'])->name('archive');
+
+        // Wildcard routes last
+        Route::get('/{patient}',        [PatientController::class, 'show'])->name('show');
+        Route::get('/{patient}/edit',   [PatientController::class, 'edit'])->name('edit');
+        Route::put('/{patient}',        [PatientController::class, 'update'])->name('update');
+        Route::delete('/{patient}',     [PatientController::class, 'destroy'])->name('destroy');
     });
 });
 

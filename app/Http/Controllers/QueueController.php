@@ -26,7 +26,7 @@ class QueueController extends Controller
                 'department'  => null,
                 'queues'      => collect(),
                 'stats'       => ['total'=>0,'waiting'=>0,'serving'=>0,'done'=>0,'skipped'=>0,'current'=>null],
-                'patients'    => Patient::orderBy('first_name')->get(),
+                'patients'    => Patient::whereNull('deleted_at')->orderBy('first_name')->get(),
             ]);
         }
 

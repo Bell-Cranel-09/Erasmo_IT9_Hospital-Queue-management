@@ -195,7 +195,7 @@
     </a>
 
     {{-- ── ROLE-BASED NAVIGATION ────────────────────────────────────── --}}
-    @if(auth()->user()->isAdmin() || auth()->user()->isStaff())
+    @if(auth()->check() && (auth()->user()->isAdmin() || auth()->user()->isStaff()))
     {{-- Admin/Staff: see full patient list --}}
     <a href="{{ route('patients.index') }}"
        class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition-all {{ request()->routeIs('patients.*') ? 'nav-active' : '' }}">
@@ -205,7 +205,7 @@
         </svg>
         Patients
     </a>
-    @else
+    @elseif(auth()->check() && auth()->user()->isPatient())
     {{-- Patient: only sees their own profile --}}
     <a href="{{ route('my-profile') }}"
        class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition-all {{ request()->routeIs('patients.edit') || request()->routeIs('patients.show') ? 'nav-active' : '' }}">

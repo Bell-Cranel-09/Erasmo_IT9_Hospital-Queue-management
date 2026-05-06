@@ -7,7 +7,7 @@
 
 <div class="max-w-3xl mx-auto space-y-5">
 
-    {{-- Doctor info --}}
+    {{-- Doctor info card --}}
     <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex items-center gap-4">
         <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
             {{ strtoupper(substr($doctor->first_name, 0, 1)) }}
@@ -30,7 +30,7 @@
                 <h3 class="font-semibold text-slate-800 text-sm">Schedules</h3>
                 <div class="flex items-center gap-3">
                     <span class="flex items-center gap-1 text-xs text-green-600">
-                        <span class="w-2 h-2 rounded-full bg-green-500"></span> Active
+                        <span class="w-2 h-2 rounded-full bg-green-400"></span> Active
                     </span>
                     <span class="flex items-center gap-1 text-xs text-slate-400">
                         <span class="w-2 h-2 rounded-full bg-slate-300"></span> Inactive
@@ -63,47 +63,57 @@
                         </span>
                     </div>
 
-                    {{-- Info --}}
+                    {{-- Schedule info --}}
                     <div class="flex-1 min-w-0">
                         <p class="text-sm font-semibold text-slate-800">{{ $schedule->day_name }}</p>
-                        <p class="text-xs text-slate-500">
+                        <p class="text-xs text-slate-500 mt-0.5">
                             {{ \Carbon\Carbon::parse($schedule->start_time)->format('h:i A') }} –
                             {{ \Carbon\Carbon::parse($schedule->end_time)->format('h:i A') }}
                         </p>
                         <p class="text-xs text-slate-400">
-                            {{ $schedule->slot_duration_minutes }}min slots · Max {{ $schedule->max_patients }}
+                            {{ $schedule->slot_duration_minutes }}min slots · Max {{ $schedule->max_patients }} patients
                         </p>
                     </div>
 
-                    {{-- Status + Action button --}}
+                    {{-- Status badge + action button --}}
                     <div class="flex items-center gap-2 flex-shrink-0">
-                        @if($schedule->is_active)
-                            <span class="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">Active</span>
 
-                            {{-- Deactivate button (data stays, just marked inactive) --}}
+                        @if($schedule->is_active)
+                            {{-- Active: show deactivate button --}}
+                            <span class="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                                Active
+                            </span>
+
                             <form method="POST"
-                                  action="{{ route('doctors.schedules.destroy', [$doctor, $schedule]) }}"
-                                  onsubmit="return confirm('Deactivate {{ $schedule->day_name }} schedule? The data will be kept and can be viewed in history.')">
+                                  action="{{ route('doctors.schedules.destroy', ['doctor' => $doctor->id, 'schedule' => $schedule->id]) }}"
+                                  onsubmit="return confirm('Deactivate the {{ $schedule->day_name }} schedule? Data and appointment history will be preserved.')">
                                 @csrf
                                 @method('DELETE')
                                 <button type="submit"
                                         class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-amber-500 hover:bg-amber-50 transition-all"
-                                        title="Deactivate schedule (data preserved)">
+                                        title="Deactivate schedule (data kept)">
+                                    {{-- Ban / disable icon --}}
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                               d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
                                     </svg>
                                 </button>
                             </form>
+
                         @else
-                            <span class="text-xs font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Inactive</span>
-                            {{-- Reactivate button --}}
-                            <form method="POST" action="{{ route('doctors.schedules.restore', [$doctor, $schedule]) }}">
+                            {{-- Inactive: show restore button --}}
+                            <span class="text-xs font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                                Inactive
+                            </span>
+
+                            <form method="POST"
+                                  action="{{ route('doctors.schedules.restore', ['doctor' => $doctor->id, 'schedule' => $schedule->id]) }}">
                                 @csrf
                                 @method('PATCH')
                                 <button type="submit"
                                         class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-green-500 hover:bg-green-50 transition-all"
-                                        title="Reactivate schedule">
+                                        title="Restore schedule">
+                                    {{-- Refresh / restore icon --}}
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                               d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -116,14 +126,14 @@
                 @endforeach
             </div>
 
-            {{-- Legend note --}}
-            <div class="px-5 py-3 bg-slate-50 border-t border-slate-100">
-                <p class="text-xs text-slate-400 flex items-center gap-1.5">
+            {{-- Info note --}}
+            <div class="px-5 py-3 bg-amber-50 border-t border-amber-100">
+                <p class="text-xs text-amber-600 flex items-center gap-1.5">
                     <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
-                    Deactivating a schedule keeps all data and appointment history intact.
+                    Deactivating keeps all data and history. Use restore to reactivate.
                 </p>
             </div>
             @endif
@@ -136,7 +146,9 @@
                 <p class="text-blue-200 text-xs mt-0.5">Only active schedules appear for booking</p>
             </div>
 
-            <form method="POST" action="{{ route('doctors.schedules.store', $doctor) }}" class="p-5 space-y-4">
+            <form method="POST"
+                  action="{{ route('doctors.schedules.store', $doctor) }}"
+                  class="p-5 space-y-4">
                 @csrf
 
                 @if($errors->any())
@@ -151,7 +163,9 @@
                 @endif
 
                 <div>
-                    <label class="block text-xs font-medium text-slate-600 mb-1.5">Day of Week <span class="text-red-400">*</span></label>
+                    <label class="block text-xs font-medium text-slate-600 mb-1.5">
+                        Day of Week <span class="text-red-400">*</span>
+                    </label>
                     <select name="day_of_week" required
                             class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                         @foreach($days as $num => $name)
@@ -164,13 +178,19 @@
 
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1.5">Start Time <span class="text-red-400">*</span></label>
-                        <input name="start_time" type="time" required value="{{ old('start_time', '08:00') }}"
+                        <label class="block text-xs font-medium text-slate-600 mb-1.5">
+                            Start Time <span class="text-red-400">*</span>
+                        </label>
+                        <input name="start_time" type="time" required
+                               value="{{ old('start_time', '08:00') }}"
                                class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1.5">End Time <span class="text-red-400">*</span></label>
-                        <input name="end_time" type="time" required value="{{ old('end_time', '17:00') }}"
+                        <label class="block text-xs font-medium text-slate-600 mb-1.5">
+                            End Time <span class="text-red-400">*</span>
+                        </label>
+                        <input name="end_time" type="time" required
+                               value="{{ old('end_time', '17:00') }}"
                                class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                 </div>

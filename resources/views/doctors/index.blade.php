@@ -8,15 +8,26 @@
 {{-- Header --}}
 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
     <p class="text-sm text-slate-500">All registered doctors and their schedules</p>
-    @if(auth()->user()->isAdmin())
-    <button onclick="document.getElementById('add-doctor-modal').classList.remove('hidden')"
-            class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-blue-500/25 hover:-translate-y-0.5">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-        </svg>
-        Add Doctor
-    </button>
-    @endif
+    <div class="flex items-center gap-3">
+        {{-- Deleted doctors link (admin only) --}}
+        @if(auth()->user()->isAdmin())
+        <a href="{{ route('doctors.trashed') }}"
+           class="inline-flex items-center gap-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl transition border border-red-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+            Deleted Doctors
+        </a>
+        <button onclick="document.getElementById('add-doctor-modal').classList.remove('hidden')"
+                class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-blue-500/25 hover:-translate-y-0.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add Doctor
+        </button>
+        @endif
+    </div>
 </div>
 
 {{-- Doctor cards --}}
@@ -41,8 +52,8 @@
                 <div class="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
                     {{ strtoupper(substr($doctor->first_name, 0, 1)) }}
                 </div>
-                <div>
-                    <p class="text-white font-semibold">{{ $doctor->full_name }}</p>
+                <div class="flex-1 min-w-0">
+                    <p class="text-white font-semibold truncate">{{ $doctor->full_name }}</p>
                     <p class="text-blue-200 text-xs">{{ $doctor->specialization }}</p>
                 </div>
             </div>
@@ -50,30 +61,24 @@
 
         {{-- Doctor info --}}
         <div class="p-4 space-y-3">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
                 <span class="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full">
                     {{ $doctor->department->name }}
                 </span>
-                @if($doctor->is_available)
-                    <span class="text-xs font-semibold text-green-700 bg-green-50 px-2.5 py-1 rounded-full flex items-center gap-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                        Available
-                    </span>
-                @else
-                    <span class="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
-                        Unavailable
-                    </span>
-                @endif
+                <span class="text-xs font-semibold text-green-700 bg-green-50 px-2.5 py-1 rounded-full flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                    Active
+                </span>
             </div>
 
-            {{-- Schedule --}}
+            {{-- Schedule preview --}}
             <div>
                 <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Schedule</p>
-                @if($doctor->schedules->isEmpty())
-                    <p class="text-xs text-slate-400 italic">No schedules set</p>
+                @if($doctor->schedules->where('is_active', true)->isEmpty())
+                    <p class="text-xs text-slate-400 italic">No active schedules</p>
                 @else
                 <div class="space-y-1">
-                    @foreach($doctor->schedules->where('is_active', true) as $schedule)
+                    @foreach($doctor->schedules->where('is_active', true)->take(3) as $schedule)
                     <div class="flex items-center justify-between text-xs bg-slate-50 rounded-lg px-3 py-1.5">
                         <span class="font-medium text-slate-700">{{ $schedule->day_name }}</span>
                         <span class="text-slate-500">
@@ -86,7 +91,7 @@
                 @endif
             </div>
 
-            {{-- Actions --}}
+            {{-- Action buttons --}}
             <div class="flex gap-2 pt-1">
                 <a href="{{ route('appointments.create', ['doctor_id' => $doctor->id]) }}"
                    class="flex-1 text-center text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-xl transition">
@@ -94,9 +99,19 @@
                 </a>
                 @if(auth()->user()->isAdmin())
                 <a href="{{ route('doctors.schedules', $doctor) }}"
-                   class="flex-1 text-center text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl transition">
-                    Manage Schedule
+                   class="text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl transition">
+                    Schedule
                 </a>
+                {{-- Delete button --}}
+                <form method="POST" action="{{ route('doctors.destroy', $doctor) }}"
+                      onsubmit="return confirm('Delete {{ addslashes($doctor->full_name) }}?\n\nThis will:\n• Deactivate all their schedules\n• Cancel upcoming appointments\n• Soft delete the record (data preserved)')">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit"
+                            class="text-xs font-semibold text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl transition">
+                        Delete
+                    </button>
+                </form>
                 @endif
             </div>
         </div>
@@ -104,7 +119,6 @@
     @endforeach
 </div>
 
-{{-- Pagination --}}
 @if($doctors->hasPages())
 <div class="mt-6">{{ $doctors->links() }}</div>
 @endif
@@ -181,7 +195,6 @@
     </div>
 </div>
 
-{{-- Re-open modal if there were validation errors --}}
 @if($errors->any())
 <script>document.getElementById('add-doctor-modal').classList.remove('hidden');</script>
 @endif

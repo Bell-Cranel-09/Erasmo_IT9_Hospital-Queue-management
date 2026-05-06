@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ArchivedPatient;
 use App\Models\Patient;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -12,17 +13,17 @@ use Illuminate\Support\Facades\Hash;
 class PatientController extends Controller
 {
     /**
-     * List all patients (admin/staff only).
+     * List active patients (admin/staff only).
      */
     public function index(Request $request)
     {
-        // Patients cannot view the full patient list
         if (auth()->user()->isPatient()) {
-            return redirect()->route('patients.edit', auth()->user()->patient)
-                ->with('info', 'You can only view and edit your own profile.');
+            $patient = auth()->user()->patient;
+            if ($patient) return redirect()->route('patients.show', $patient);
+            return redirect()->route('dashboard')->with('error', 'Patient profile not found.');
         }
 
-        $query = Patient::with('user');
+        $query = Patient::whereNull('patients.deleted_at')->with('user');
 
         if ($request->filled('search')) {
             $query->where(function ($q) use ($request) {
@@ -38,7 +39,7 @@ class PatientController extends Controller
     }
 
     /**
-     * Show registration form (public — guests only).
+     * Show registration form (guests only).
      */
     public function create()
     {
@@ -46,14 +47,14 @@ class PatientController extends Controller
     }
 
     /**
-     * Handle patient self-registration (public route).
+     * Handle patient self-registration.
      */
     public function store(Request $request)
     {
         $data = $request->validate([
             'first_name'    => 'required|string|max:100',
             'last_name'     => 'required|string|max:100',
-            'email'         => 'required|email|unique:users,email',
+            'email'         => 'required|email|unique:users,email,NULL,id,deleted_at,NULL',
             'password'      => 'required|string|min:8|confirmed',
             'date_of_birth' => 'required|date|before:today',
             'gender'        => 'required|in:male,female,other',
@@ -71,7 +72,8 @@ class PatientController extends Controller
                     'is_active' => true,
                 ]);
 
-                $patCode = 'PAT-' . str_pad(Patient::count() + 1, 4, '0', STR_PAD_LEFT);
+                $count   = Patient::withTrashed()->count() + 1;
+                $patCode = 'PAT-' . str_pad($count, 4, '0', STR_PAD_LEFT);
 
                 Patient::create([
                     'user_id'       => $user->id,
@@ -96,17 +98,14 @@ class PatientController extends Controller
     }
 
     /**
-     * Show a patient profile.
-     * Patients can only view their own profile.
-     * Admin/Staff can view any profile.
+     * Show patient profile.
      */
     public function show(Patient $patient)
     {
-        // If the logged-in user is a patient, only allow viewing their own profile
         if (auth()->user()->isPatient()) {
-            $ownPatient = auth()->user()->patient;
-            if (!$ownPatient || $ownPatient->id !== $patient->id) {
-                return redirect()->route('patients.show', $ownPatient)
+            $own = auth()->user()->patient;
+            if (!$own || $own->id !== $patient->id) {
+                return redirect()->route('patients.show', $own)
                     ->with('error', 'You can only view your own profile.');
             }
         }
@@ -118,16 +117,13 @@ class PatientController extends Controller
 
     /**
      * Show edit form.
-     * Patients can only edit their own profile.
-     * Admin/Staff can edit any profile.
      */
     public function edit(Patient $patient)
     {
-        // Patients can only edit their own profile
         if (auth()->user()->isPatient()) {
-            $ownPatient = auth()->user()->patient;
-            if (!$ownPatient || $ownPatient->id !== $patient->id) {
-                return redirect()->route('patients.edit', $ownPatient)
+            $own = auth()->user()->patient;
+            if (!$own || $own->id !== $patient->id) {
+                return redirect()->route('patients.edit', $own)
                     ->with('error', 'You can only edit your own profile.');
             }
         }
@@ -137,15 +133,13 @@ class PatientController extends Controller
 
     /**
      * Update patient profile.
-     * Patients can only update their own profile.
      */
     public function update(Request $request, Patient $patient)
     {
-        // Patients can only update their own profile
         if (auth()->user()->isPatient()) {
-            $ownPatient = auth()->user()->patient;
-            if (!$ownPatient || $ownPatient->id !== $patient->id) {
-                return redirect()->route('patients.edit', $ownPatient)
+            $own = auth()->user()->patient;
+            if (!$own || $own->id !== $patient->id) {
+                return redirect()->route('patients.edit', $own)
                     ->with('error', 'You can only edit your own profile.');
             }
         }
@@ -169,8 +163,10 @@ class PatientController extends Controller
     }
 
     /**
-     * Delete a patient (admin only).
-     * Marks user as inactive — does NOT permanently delete.
+     * SOFT DELETE a patient (admin only).
+     * Sets deleted_at — data stays in DB.
+     * Patient moves to "Deleted Patients" list.
+     * Admin can then archive or restore from there.
      */
     public function destroy(Patient $patient)
     {
@@ -178,12 +174,147 @@ class PatientController extends Controller
             return back()->with('error', 'Only admins can delete patient records.');
         }
 
-        $name = $patient->full_name;
+        $name      = $patient->full_name;
+        $patientId = $patient->id;
+        $userId    = $patient->user_id;
 
-        // Soft delete: deactivate instead of permanently removing
-        $patient->user->update(['is_active' => false]);
+        // Soft delete patient record
+        Patient::where('id', $patientId)->update(['deleted_at' => now()]);
+
+        // Soft delete user record
+        User::where('id', $userId)->update(['deleted_at' => now()]);
 
         return redirect()->route('patients.index')
-            ->with('success', "{$name}'s account has been deactivated. Data is preserved.");
+            ->with('success', "{$name} has been deleted. View in Deleted Patients to restore or archive.");
+    }
+
+    /**
+     * Show soft-deleted patients (admin only).
+     * These can be restored or moved to archive.
+     */
+    public function trashed()
+    {
+        if (!auth()->user()->isAdmin()) {
+            return back()->with('error', 'Unauthorized.');
+        }
+
+        $patients = Patient::withTrashed()
+            ->whereNotNull('patients.deleted_at')
+            ->with('user')
+            ->orderBy('deleted_at', 'desc')
+            ->paginate(15);
+
+        return view('patients.trashed', compact('patients'));
+    }
+
+    /**
+     * Restore a soft-deleted patient (admin only).
+     * Clears deleted_at on both patient and user.
+     */
+    public function restore($id)
+    {
+        if (!auth()->user()->isAdmin()) {
+            return back()->with('error', 'Only admins can restore patients.');
+        }
+
+        $patient = Patient::withTrashed()->findOrFail($id);
+        $name    = $patient->full_name;
+
+        // Restore patient
+        Patient::withTrashed()->where('id', $id)->update(['deleted_at' => null]);
+
+        // Restore user
+        User::withTrashed()->where('id', $patient->user_id)->update(['deleted_at' => null]);
+
+        return redirect()->route('patients.trashed')
+            ->with('success', "{$name} has been restored successfully.");
+    }
+
+    /**
+     * Move a soft-deleted patient to the archive table (admin only).
+     * Saves full snapshot to archived_patients then permanently deletes.
+     */
+    public function archive($id)
+    {
+        if (!auth()->user()->isAdmin()) {
+            return back()->with('error', 'Only admins can archive patients.');
+        }
+
+        $patient = Patient::withTrashed()->with([
+            'user',
+            'appointments.doctor',
+            'queues.department',
+        ])->findOrFail($id);
+
+        $name = $patient->full_name;
+
+        DB::transaction(function () use ($patient) {
+
+            // Build appointment snapshot
+            $appointmentsSnapshot = $patient->appointments->map(fn($a) => [
+                'id'               => $a->id,
+                'reference_code'   => $a->reference_code,
+                'doctor'           => $a->doctor->full_name ?? 'N/A',
+                'appointment_date' => $a->appointment_date?->format('Y-m-d'),
+                'appointment_time' => $a->appointment_time,
+                'status'           => $a->status,
+                'reason'           => $a->reason,
+            ])->toArray();
+
+            // Build queue snapshot
+            $queuesSnapshot = $patient->queues->map(fn($q) => [
+                'id'           => $q->id,
+                'queue_code'   => $q->queue_code,
+                'queue_number' => $q->queue_number,
+                'department'   => $q->department->name ?? 'N/A',
+                'queue_date'   => $q->queue_date?->format('Y-m-d'),
+                'status'       => $q->status,
+            ])->toArray();
+
+            // Save to archive
+            ArchivedPatient::create([
+                'original_patient_id'   => $patient->id,
+                'original_user_id'      => $patient->user_id,
+                'patient_code'          => $patient->patient_code,
+                'first_name'            => $patient->first_name,
+                'last_name'             => $patient->last_name,
+                'date_of_birth'         => $patient->date_of_birth,
+                'gender'                => $patient->gender,
+                'phone'                 => $patient->phone,
+                'address'               => $patient->address,
+                'medical_history'       => $patient->medical_history,
+                'email'                 => $patient->user->email ?? 'N/A',
+                'user_name'             => $patient->user->name ?? 'N/A',
+                'total_appointments'    => $patient->appointments->count(),
+                'total_queues'          => $patient->queues->count(),
+                'appointments_snapshot' => $appointmentsSnapshot,
+                'queues_snapshot'       => $queuesSnapshot,
+                'deleted_by_user_id'    => auth()->id(),
+                'deleted_by_name'       => auth()->user()->name,
+                'deletion_reason'       => 'Archived by admin',
+                'archived_at'           => now(),
+            ]);
+
+            // Permanently delete user (cascades to patient)
+            User::withTrashed()->where('id', $patient->user_id)->forceDelete();
+            Patient::withTrashed()->where('id', $patient->id)->forceDelete();
+        });
+
+        return redirect()->route('patients.trashed')
+            ->with('success', "{$name} has been archived. Record saved to Archives.");
+    }
+
+    /**
+     * Show archived patients (admin only).
+     */
+    public function archives()
+    {
+        if (!auth()->user()->isAdmin()) {
+            return back()->with('error', 'Unauthorized.');
+        }
+
+        $archives = ArchivedPatient::orderByDesc('archived_at')->paginate(15);
+
+        return view('patients.archives', compact('archives'));
     }
 }

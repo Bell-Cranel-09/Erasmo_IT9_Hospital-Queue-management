@@ -10,13 +10,12 @@
     {{-- ── PROFILE HEADER CARD ─────────────────────────────────────── --}}
     <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
 
-        {{-- Blue banner --}}
-        <div class="bg-gradient-to-r from-blue-700 to-blue-500 h-24 relative">
-            {{-- Admin-only delete button --}}
+        {{-- Blue banner — just decoration, nothing overlapping it --}}
+        <div class="bg-gradient-to-r from-blue-700 to-blue-500 h-20 relative">
             @if(auth()->user()->isAdmin())
             <div class="absolute top-4 right-4">
                 <form method="POST" action="{{ route('patients.destroy', $patient) }}"
-                      onsubmit="return confirm('Deactivate {{ $patient->full_name }}? Their data will be preserved.')">
+                      onsubmit="return confirm('Deactivate {{ addslashes($patient->full_name) }}? Data is preserved.')">
                     @csrf
                     @method('DELETE')
                     <button type="submit"
@@ -32,25 +31,37 @@
             @endif
         </div>
 
-        {{-- Avatar + name row --}}
-        <div class="px-6 pb-6">
-            <div class="flex items-end gap-4 -mt-10 mb-5">
+        {{-- White section — avatar + info ALL inside here, no overlap --}}
+        <div class="px-6 py-5">
 
-                {{-- Avatar circle --}}
-                <div class="w-20 h-20 rounded-2xl bg-white shadow-xl border-4 border-white flex items-center justify-center flex-shrink-0">
-                    <span class="text-3xl font-bold text-blue-600">
-                        {{ strtoupper(substr($patient->first_name, 0, 1)) }}
-                    </span>
-                </div>
+            {{-- Top row: avatar + name + buttons --}}
+            <div class="flex flex-wrap items-center gap-4 mb-5">
+
+                {{-- Avatar using SVG — 100% immune to CSS font overrides --}}
+                <svg width="64" height="64" viewBox="0 0 64 64"
+                     xmlns="http://www.w3.org/2000/svg"
+                     style="flex-shrink:0; border-radius:12px; display:block;">
+                    <rect width="64" height="64" fill="#2563eb" rx="12"/>
+                    <text
+                        x="32" y="32"
+                        dominant-baseline="central"
+                        text-anchor="middle"
+                        fill="white"
+                        font-size="28"
+                        font-weight="bold"
+                        font-family="Impact, Arial Black, sans-serif">{{ strtoupper(mb_substr($patient->first_name, 0, 1)) }}</text>
+                </svg>
 
                 {{-- Name + code --}}
-                <div class="pb-1 flex-1 min-w-0">
-                    <h2 class="text-xl font-bold text-slate-800">{{ $patient->full_name }}</h2>
-                    <p class="text-sm text-slate-500">{{ $patient->patient_code }}</p>
+                <div class="flex-1" style="min-width:0;">
+                    <h2 class="text-lg font-bold text-slate-800" style="word-break:break-word; white-space:normal;">
+                        {{ $patient->full_name }}
+                    </h2>
+                    <p class="text-sm text-slate-500 mt-0.5">{{ $patient->patient_code }}</p>
                 </div>
 
-                {{-- Action buttons --}}
-                <div class="pb-1 flex gap-2 flex-shrink-0">
+                {{-- Buttons --}}
+                <div class="flex gap-2 flex-shrink-0">
                     <a href="{{ route('patients.edit', $patient) }}"
                        class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 px-3 py-2 rounded-xl transition">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,7 +79,7 @@
                 </div>
             </div>
 
-            {{-- Info grid — matches screenshot layout --}}
+            {{-- Info grid --}}
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-5 pt-4 border-t border-slate-100">
                 <div>
                     <p class="text-xs text-slate-400 mb-1">Date of Birth</p>
@@ -86,7 +97,9 @@
                 </div>
                 <div>
                     <p class="text-xs text-slate-400 mb-1">Email</p>
-                    <p class="text-sm font-semibold text-slate-700 truncate">{{ $patient->user->email }}</p>
+                    <p class="text-sm font-semibold text-slate-700" style="word-break:break-all;">
+                        {{ $patient->user->email }}
+                    </p>
                 </div>
             </div>
 
@@ -106,7 +119,7 @@
         <div class="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-xl flex-shrink-0">
             {{ $activeQueue->queue_number }}
         </div>
-        <div class="flex-1">
+        <div class="flex-1 min-w-0">
             <p class="text-sm font-semibold text-blue-800">Currently in Queue</p>
             <p class="text-xs text-blue-600 mt-0.5">
                 {{ $activeQueue->queue_code }} · {{ $activeQueue->department->name }} ·
@@ -128,7 +141,6 @@
                     + Book
                 </a>
             </div>
-
             @if($patient->appointments->isEmpty())
             <div class="flex flex-col items-center justify-center py-12 text-center">
                 <div class="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mb-3">
@@ -158,7 +170,7 @@
                         <form method="POST" action="{{ route('appointments.cancel', $appt) }}"
                               onsubmit="return confirm('Cancel this appointment?')">
                             @csrf @method('PATCH')
-                            <button type="submit" title="Cancel"
+                            <button type="submit"
                                     class="w-6 h-6 rounded-lg flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -172,8 +184,8 @@
             </div>
             @if($patient->appointments->count() > 5)
             <div class="px-5 py-3 border-t border-slate-100 text-center">
-                <a href="{{ route('appointments.index') }}" class="text-xs text-blue-600 hover:text-blue-700 font-medium">
-                    View all {{ $patient->appointments->count() }} appointments →
+                <a href="{{ route('appointments.index') }}" class="text-xs text-blue-600 font-medium">
+                    View all {{ $patient->appointments->count() }} →
                 </a>
             </div>
             @endif
@@ -185,7 +197,6 @@
             <div class="px-5 py-4 border-b border-slate-100">
                 <h3 class="font-semibold text-slate-800 text-sm">Queue History</h3>
             </div>
-
             @if($patient->queues->isEmpty())
             <div class="flex flex-col items-center justify-center py-12 text-center">
                 <div class="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mb-3">
@@ -220,7 +231,6 @@
     </div>
 
     {{-- ── MEDICAL HISTORY ─────────────────────────────────────────── --}}
-    @if($patient->medical_history || auth()->user()->isAdmin() || auth()->user()->isStaff())
     <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
         <div class="flex items-center justify-between mb-3">
             <h3 class="font-semibold text-slate-800 text-sm">Medical History</h3>
@@ -233,7 +243,6 @@
             <p class="text-sm text-slate-400 italic">No medical history recorded yet.</p>
         @endif
     </div>
-    @endif
 
 </div>
 

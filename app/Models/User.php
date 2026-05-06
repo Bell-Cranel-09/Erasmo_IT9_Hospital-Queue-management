@@ -5,11 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable;
-
+    use HasFactory, Notifiable, SoftDeletes; // ← add SoftDeletes here
     protected $fillable = [
         'name',
         'email',
@@ -26,8 +26,7 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'is_active'         => 'boolean',
-        // !! 'password' => 'hashed' is intentionally REMOVED
-        // Having it causes double-hashing which breaks login
+        'deleted_at'        => 'datetime', // ← add this
     ];
 
     // ── Relationships ──────────────────────────────────────────────────────

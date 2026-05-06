@@ -3,17 +3,22 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes; // ← required
 
 class Patient extends Model
 {
+    use SoftDeletes; // ← required for onlyTrashed() to work
+
     protected $fillable = [
         'user_id', 'patient_code', 'first_name', 'last_name',
         'date_of_birth', 'gender', 'phone', 'address', 'medical_history',
     ];
 
-    protected $casts = ['date_of_birth' => 'date'];
+    protected $casts = [
+        'date_of_birth' => 'date',
+        'deleted_at'    => 'datetime', // ← required
+    ];
 
-    // ── Relationships ──────────────────────────────────────────
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -29,7 +34,6 @@ class Patient extends Model
         return $this->hasMany(Queue::class);
     }
 
-    // ── Helpers ────────────────────────────────────────────────
     public function getFullNameAttribute(): string
     {
         return "{$this->first_name} {$this->last_name}";

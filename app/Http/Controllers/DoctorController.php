@@ -14,7 +14,7 @@ class DoctorController extends Controller
 {
     public function index()
     {
-        $doctors     = Doctor::with(['department', 'user', 'schedules'])->paginate(15);
+        $doctors = Doctor::with(['department', 'schedules'])->paginate(15);
         $departments = Department::where('is_active', true)->get();
 
         return view('doctors.index', compact('doctors', 'departments'));
@@ -43,7 +43,7 @@ class DoctorController extends Controller
             Doctor::create([
                 'user_id'        => $user->id,
                 'department_id'  => $data['department_id'],
-                'doctor_code'    => 'DOC-' . str_pad(Doctor::count() + 1, 3, '0', STR_PAD_LEFT),
+                'doctor_code'    => 'DOC-' . str_pad(Doctor::withTrashed()->count() + 1, 3, '0', STR_PAD_LEFT),
                 'first_name'     => $data['first_name'],
                 'last_name'      => $data['last_name'],
                 'specialization' => $data['specialization'],
@@ -57,8 +57,7 @@ class DoctorController extends Controller
 
     public function schedules(Doctor $doctor)
     {
-        // Load ALL schedules including inactive so staff can see history & restore
-        $schedules = $doctor->schedules()->orderBy('is_active', 'desc')->orderBy('day_of_week')->get();
+        $schedules = $doctor->schedules()->orderByDesc('is_active')->orderBy('day_of_week')->get();
         $days      = DoctorSchedule::DAYS;
 
         return view('doctors.schedules', compact('doctor', 'schedules', 'days'));
@@ -80,7 +79,7 @@ class DoctorController extends Controller
             ->exists();
 
         if ($exists) {
-            return back()->with('error', 'An active schedule already exists for this day. Deactivate it first.');
+            return back()->with('error', 'An active schedule already exists for this day.');
         }
 
         $doctor->schedules()->create($data);
@@ -88,32 +87,23 @@ class DoctorController extends Controller
         return back()->with('success', 'Schedule added successfully.');
     }
 
-    /**
-     * Deactivate a schedule (soft delete).
-     * Sets is_active = false. Data and linked appointments are fully preserved.
-     */
     public function destroySchedule(Doctor $doctor, DoctorSchedule $schedule)
     {
-        if ($schedule->doctor_id !== $doctor->id) {
+        if ((int) $schedule->doctor_id !== (int) $doctor->id) {
             return back()->with('error', 'Schedule does not belong to this doctor.');
         }
 
         $schedule->update(['is_active' => false]);
 
-        return back()->with('success', "{$schedule->day_name} schedule deactivated. All data preserved.");
+        return back()->with('success', "{$schedule->day_name} schedule deactivated. Data preserved.");
     }
 
-    /**
-     * Restore a deactivated schedule.
-     * Sets is_active = true again.
-     */
     public function restoreSchedule(Doctor $doctor, DoctorSchedule $schedule)
     {
-        if ($schedule->doctor_id !== $doctor->id) {
+        if ((int) $schedule->doctor_id !== (int) $doctor->id) {
             return back()->with('error', 'Schedule does not belong to this doctor.');
         }
 
-        // Check no other active schedule exists for this day first
         $conflict = DoctorSchedule::where('doctor_id', $doctor->id)
             ->where('day_of_week', $schedule->day_of_week)
             ->where('is_active', true)
@@ -121,11 +111,87 @@ class DoctorController extends Controller
             ->exists();
 
         if ($conflict) {
-            return back()->with('error', 'Another active schedule already exists for this day.');
+            return back()->with('error', 'Another active schedule exists for this day.');
         }
 
         $schedule->update(['is_active' => true]);
 
-        return back()->with('success', "{$schedule->day_name} schedule restored successfully.");
+        return back()->with('success', "{$schedule->day_name} schedule restored.");
+    }
+
+    /**
+     * Soft delete a doctor (admin only).
+     * Deactivates schedules, cancels future appointments, sets deleted_at.
+     * All data stays in the database.
+     */
+   public function destroy(Request $request, $id)
+    {
+    if (!auth()->user()->isAdmin()) {
+        return redirect()->route('doctors.index')->with('error', 'Only admins can delete doctors.');
+    }
+
+    $doctor = Doctor::findOrFail($id);
+    $name   = $doctor->full_name;
+    $userId = $doctor->user_id;
+
+    // Deactivate all schedules
+    \App\Models\DoctorSchedule::where('doctor_id', $id)->update(['is_active' => false]);
+
+    // Cancel upcoming appointments
+    \App\Models\Appointment::where('doctor_id', $id)
+        ->whereIn('status', ['pending', 'confirmed'])
+        ->where('appointment_date', '>=', today())
+        ->update(['status' => 'canceled']);
+
+    // Soft delete doctor directly via query
+    \App\Models\Doctor::where('id', $id)->update(['deleted_at' => now()]);
+
+    // Soft delete user directly via query
+    \App\Models\User::where('id', $userId)->update(['deleted_at' => now()]);
+
+    return redirect()->route('doctors.index')
+        ->with('success', "{$name} has been deleted successfully.");
+    }
+    /**
+     * Show soft-deleted doctors (admin only).
+     */
+
+    public function trashed()
+    {
+    if (!auth()->user()->isAdmin()) {
+        return back()->with('error', 'Unauthorized.');
+    }
+
+    // onlyTrashed() shows ONLY soft-deleted records
+    $doctors = Doctor::onlyTrashed()
+        ->with(['department'])
+        ->orderBy('deleted_at', 'desc')
+        ->paginate(15);
+
+    return view('doctors.trashed', compact('doctors'));
+    }
+
+    /**
+     * Restore a soft-deleted doctor (admin only).
+     */
+    public function restore($id)
+    {
+    if (!auth()->user()->isAdmin()) {
+        return back()->with('error', 'Only admins can restore doctors.');
+    }
+
+    $doctor = Doctor::withTrashed()->findOrFail($id);
+    $name   = $doctor->full_name;
+
+    DB::transaction(function () use ($doctor) {
+        // Restore the doctor
+        $doctor->restore();
+
+        // Restore the user using the stored user_id directly
+        \App\Models\User::withTrashed()->where('id', $doctor->user_id)->restore();
+    });
+
+    return redirect()->route('doctors.index')
+        ->with('success', "{$name} has been restored successfully.");
     }
 }

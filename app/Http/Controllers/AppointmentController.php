@@ -46,7 +46,7 @@ class AppointmentController extends Controller
     public function create(Request $request)
     {
         $doctors  = Doctor::with('department')->where('is_available', true)->get();
-        $patients = Patient::orderBy('first_name')->get();
+        $patients = Patient::whereNull('deleted_at')->orderBy('first_name')->get();
 
         return view('appointments.create', compact('doctors', 'patients'));
     }
