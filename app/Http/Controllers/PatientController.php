@@ -13,6 +13,14 @@ use Illuminate\Support\Facades\Hash;
 class PatientController extends Controller
 {
     /**
+     * Check if current user is admin or staff.
+     */
+    private function isAdminOrStaff(): bool
+    {
+        return auth()->user()->isAdmin() || auth()->user()->isStaff();
+    }
+
+    /**
      * List active patients (admin/staff only).
      */
     public function index(Request $request)
@@ -99,6 +107,7 @@ class PatientController extends Controller
 
     /**
      * Show patient profile.
+     * Admin/Staff can view any. Patients can only view their own.
      */
     public function show(Patient $patient)
     {
@@ -117,6 +126,7 @@ class PatientController extends Controller
 
     /**
      * Show edit form.
+     * Admin/Staff can edit any. Patients can only edit their own.
      */
     public function edit(Patient $patient)
     {
@@ -133,6 +143,7 @@ class PatientController extends Controller
 
     /**
      * Update patient profile.
+     * Admin/Staff can update any. Patients can only update their own.
      */
     public function update(Request $request, Patient $patient)
     {
@@ -163,25 +174,19 @@ class PatientController extends Controller
     }
 
     /**
-     * SOFT DELETE a patient (admin only).
-     * Sets deleted_at — data stays in DB.
-     * Patient moves to "Deleted Patients" list.
-     * Admin can then archive or restore from there.
+     * SOFT DELETE a patient (admin/staff).
      */
     public function destroy(Patient $patient)
     {
-        if (!auth()->user()->isAdmin()) {
-            return back()->with('error', 'Only admins can delete patient records.');
+        if (!$this->isAdminOrStaff()) {
+            return back()->with('error', 'Unauthorized action.');
         }
 
         $name      = $patient->full_name;
         $patientId = $patient->id;
         $userId    = $patient->user_id;
 
-        // Soft delete patient record
         Patient::where('id', $patientId)->update(['deleted_at' => now()]);
-
-        // Soft delete user record
         User::where('id', $userId)->update(['deleted_at' => now()]);
 
         return redirect()->route('patients.index')
@@ -189,12 +194,11 @@ class PatientController extends Controller
     }
 
     /**
-     * Show soft-deleted patients (admin only).
-     * These can be restored or moved to archive.
+     * Show soft-deleted patients (admin/staff).
      */
     public function trashed()
     {
-        if (!auth()->user()->isAdmin()) {
+        if (!$this->isAdminOrStaff()) {
             return back()->with('error', 'Unauthorized.');
         }
 
@@ -208,22 +212,18 @@ class PatientController extends Controller
     }
 
     /**
-     * Restore a soft-deleted patient (admin only).
-     * Clears deleted_at on both patient and user.
+     * Restore a soft-deleted patient (admin/staff).
      */
     public function restore($id)
     {
-        if (!auth()->user()->isAdmin()) {
-            return back()->with('error', 'Only admins can restore patients.');
+        if (!$this->isAdminOrStaff()) {
+            return back()->with('error', 'Unauthorized.');
         }
 
         $patient = Patient::withTrashed()->findOrFail($id);
         $name    = $patient->full_name;
 
-        // Restore patient
         Patient::withTrashed()->where('id', $id)->update(['deleted_at' => null]);
-
-        // Restore user
         User::withTrashed()->where('id', $patient->user_id)->update(['deleted_at' => null]);
 
         return redirect()->route('patients.trashed')
@@ -231,13 +231,13 @@ class PatientController extends Controller
     }
 
     /**
-     * Move a soft-deleted patient to the archive table (admin only).
-     * Saves full snapshot to archived_patients then permanently deletes.
+     * Move a soft-deleted patient to the archive table (admin/staff).
+     * Saves full snapshot then permanently deletes the records.
      */
     public function archive($id)
     {
-        if (!auth()->user()->isAdmin()) {
-            return back()->with('error', 'Only admins can archive patients.');
+        if (!$this->isAdminOrStaff()) {
+            return back()->with('error', 'Unauthorized.');
         }
 
         $patient = Patient::withTrashed()->with([
@@ -250,7 +250,6 @@ class PatientController extends Controller
 
         DB::transaction(function () use ($patient) {
 
-            // Build appointment snapshot
             $appointmentsSnapshot = $patient->appointments->map(fn($a) => [
                 'id'               => $a->id,
                 'reference_code'   => $a->reference_code,
@@ -261,7 +260,6 @@ class PatientController extends Controller
                 'reason'           => $a->reason,
             ])->toArray();
 
-            // Build queue snapshot
             $queuesSnapshot = $patient->queues->map(fn($q) => [
                 'id'           => $q->id,
                 'queue_code'   => $q->queue_code,
@@ -271,7 +269,6 @@ class PatientController extends Controller
                 'status'       => $q->status,
             ])->toArray();
 
-            // Save to archive
             ArchivedPatient::create([
                 'original_patient_id'   => $patient->id,
                 'original_user_id'      => $patient->user_id,
@@ -291,25 +288,24 @@ class PatientController extends Controller
                 'queues_snapshot'       => $queuesSnapshot,
                 'deleted_by_user_id'    => auth()->id(),
                 'deleted_by_name'       => auth()->user()->name,
-                'deletion_reason'       => 'Archived by admin',
+                'deletion_reason'       => 'Archived by ' . auth()->user()->role,
                 'archived_at'           => now(),
             ]);
 
-            // Permanently delete user (cascades to patient)
             User::withTrashed()->where('id', $patient->user_id)->forceDelete();
             Patient::withTrashed()->where('id', $patient->id)->forceDelete();
         });
 
         return redirect()->route('patients.trashed')
-            ->with('success', "{$name} has been archived. Record saved to Archives.");
+            ->with('success', "{$name} has been archived. Full record saved to Archives.");
     }
 
     /**
-     * Show archived patients (admin only).
+     * Show archived patients (admin/staff).
      */
     public function archives()
     {
-        if (!auth()->user()->isAdmin()) {
+        if (!$this->isAdminOrStaff()) {
             return back()->with('error', 'Unauthorized.');
         }
 

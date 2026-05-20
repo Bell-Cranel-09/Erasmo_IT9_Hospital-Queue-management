@@ -97,12 +97,12 @@
         Sign In
     </button>
 </form>
-
 <div class="mt-6 pt-5 border-t border-slate-100 text-center">
     <p class="text-sm text-slate-500">
         New patient?
-        {{-- Points to the PUBLIC register route --}}
-        <a href="{{ route('patients.create') }}" class="text-blue-600 hover:text-blue-700 font-medium">Create an account</a>
+        <a href="/register/patient" class="text-blue-600 hover:text-blue-700 font-medium">
+            Create an account
+        </a>
     </p>
 </div>
 

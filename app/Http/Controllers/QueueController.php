@@ -44,6 +44,13 @@ class QueueController extends Controller
 
     public function join(Request $request)
     {
+        if (!auth()->user()->isAdmin() && !auth()->user()->isStaff()) {
+            if (request()->expectsJson()) {
+                return response()->json(['error' => 'Unauthorized.'], 403);
+            }
+            return back()->with('error', 'Unauthorized.');
+        }
+
         $data = $request->validate([
             'patient_id'    => 'required|exists:patients,id',
             'department_id' => 'required|exists:departments,id',
@@ -54,23 +61,51 @@ class QueueController extends Controller
                 Patient::findOrFail($data['patient_id']),
                 Department::findOrFail($data['department_id'])
             );
-            return back()->with('success', "Queue number assigned: {$queue->queue_code}");
+
+            $message = "Queue number assigned: {$queue->queue_code}";
+
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'message'      => $message,
+                    'queue_code'   => $queue->queue_code,
+                    'queue_number' => $queue->queue_number,
+                ]);
+            }
+
+            return back()->with('success', $message);
+
         } catch (\Exception $e) {
+            if (request()->expectsJson()) {
+                return response()->json(['error' => $e->getMessage()], 422);
+            }
             return back()->with('error', $e->getMessage());
         }
     }
 
-    public function callNext(Department $department)
+   public function callNext(Department $department)
     {
-        try {
-            $next = $this->queueService->callNext($department);
-            if ($next) {
-                return back()->with('success', "Now serving: {$next->queue_code} — {$next->patient->full_name}");
-            }
-            return back()->with('info', 'No more patients waiting in this department.');
-        } catch (\Exception $e) {
-            return back()->with('error', $e->getMessage());
-        }
+    if (!auth()->user()->isAdmin() && !auth()->user()->isStaff()) {
+        return request()->expectsJson()
+            ? response()->json(['error' => 'Unauthorized.'], 403)
+            : back()->with('error', 'Unauthorized.');
+    }
+
+    try {
+        $next    = $this->queueService->callNext($department);
+        $message = $next
+            ? "Now serving: {$next->queue_code} — {$next->patient->full_name}"
+            : 'No more patients waiting.';
+        $status  = $next ? 'success' : 'info';
+
+        return request()->expectsJson()
+            ? response()->json(['message' => $message, 'status' => $status])
+            : back()->with($status, $message);
+
+    } catch (\Exception $e) {
+        return request()->expectsJson()
+            ? response()->json(['error' => $e->getMessage()], 422)
+            : back()->with('error', $e->getMessage());
+    }
     }
 
     public function display(Department $department)

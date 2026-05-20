@@ -12,9 +12,17 @@ use Illuminate\Support\Facades\Hash;
 
 class DoctorController extends Controller
 {
+    /**
+     * Check if current user is admin or staff.
+     */
+    private function isAdminOrStaff(): bool
+    {
+        return auth()->user()->isAdmin() || auth()->user()->isStaff();
+    }
+
     public function index()
     {
-        $doctors = Doctor::with(['department', 'schedules'])->paginate(15);
+        $doctors     = Doctor::with(['department', 'schedules'])->paginate(15);
         $departments = Department::where('is_active', true)->get();
 
         return view('doctors.index', compact('doctors', 'departments'));
@@ -22,13 +30,17 @@ class DoctorController extends Controller
 
     public function store(Request $request)
     {
+        if (!$this->isAdminOrStaff()) {
+            return back()->with('error', 'Unauthorized.');
+        }
+
         $data = $request->validate([
             'first_name'     => 'required|string|max:100',
             'last_name'      => 'required|string|max:100',
-            'email'          => 'required|email|unique:users,email',
+            'email'          => 'required|email|unique:users,email,NULL,id,deleted_at,NULL',
             'department_id'  => 'required|exists:departments,id',
             'specialization' => 'required|string|max:100',
-            'license_number' => 'required|string|unique:doctors,license_number',
+            'license_number' => 'required|string|unique:doctors,license_number,NULL,id,deleted_at,NULL',
             'phone'          => 'nullable|string|max:20',
         ]);
 
@@ -65,6 +77,10 @@ class DoctorController extends Controller
 
     public function storeSchedule(Request $request, Doctor $doctor)
     {
+        if (!$this->isAdminOrStaff()) {
+            return back()->with('error', 'Unauthorized.');
+        }
+
         $data = $request->validate([
             'day_of_week'           => 'required|integer|between:0,6',
             'start_time'            => 'required|date_format:H:i',
@@ -89,6 +105,10 @@ class DoctorController extends Controller
 
     public function destroySchedule(Doctor $doctor, DoctorSchedule $schedule)
     {
+        if (!$this->isAdminOrStaff()) {
+            return back()->with('error', 'Unauthorized.');
+        }
+
         if ((int) $schedule->doctor_id !== (int) $doctor->id) {
             return back()->with('error', 'Schedule does not belong to this doctor.');
         }
@@ -100,6 +120,10 @@ class DoctorController extends Controller
 
     public function restoreSchedule(Doctor $doctor, DoctorSchedule $schedule)
     {
+        if (!$this->isAdminOrStaff()) {
+            return back()->with('error', 'Unauthorized.');
+        }
+
         if ((int) $schedule->doctor_id !== (int) $doctor->id) {
             return back()->with('error', 'Schedule does not belong to this doctor.');
         }
@@ -120,78 +144,65 @@ class DoctorController extends Controller
     }
 
     /**
-     * Soft delete a doctor (admin only).
-     * Deactivates schedules, cancels future appointments, sets deleted_at.
-     * All data stays in the database.
+     * Soft delete a doctor (admin/staff).
      */
-   public function destroy(Request $request, $id)
+    public function destroy($id)
     {
-    if (!auth()->user()->isAdmin()) {
-        return redirect()->route('doctors.index')->with('error', 'Only admins can delete doctors.');
+        if (!$this->isAdminOrStaff()) {
+            return back()->with('error', 'Unauthorized.');
+        }
+
+        $doctor = Doctor::findOrFail($id);
+        $name   = $doctor->full_name;
+        $userId = $doctor->user_id;
+
+        DoctorSchedule::where('doctor_id', $id)->update(['is_active' => false]);
+
+        \App\Models\Appointment::where('doctor_id', $id)
+            ->whereIn('status', ['pending', 'confirmed'])
+            ->where('appointment_date', '>=', today())
+            ->update(['status' => 'canceled']);
+
+        Doctor::where('id', $id)->update(['deleted_at' => now()]);
+        User::where('id', $userId)->update(['deleted_at' => now()]);
+
+        return redirect()->route('doctors.index')
+            ->with('success', "{$name} has been deleted. Records are preserved and can be restored.");
     }
 
-    $doctor = Doctor::findOrFail($id);
-    $name   = $doctor->full_name;
-    $userId = $doctor->user_id;
-
-    // Deactivate all schedules
-    \App\Models\DoctorSchedule::where('doctor_id', $id)->update(['is_active' => false]);
-
-    // Cancel upcoming appointments
-    \App\Models\Appointment::where('doctor_id', $id)
-        ->whereIn('status', ['pending', 'confirmed'])
-        ->where('appointment_date', '>=', today())
-        ->update(['status' => 'canceled']);
-
-    // Soft delete doctor directly via query
-    \App\Models\Doctor::where('id', $id)->update(['deleted_at' => now()]);
-
-    // Soft delete user directly via query
-    \App\Models\User::where('id', $userId)->update(['deleted_at' => now()]);
-
-    return redirect()->route('doctors.index')
-        ->with('success', "{$name} has been deleted successfully.");
-    }
     /**
-     * Show soft-deleted doctors (admin only).
+     * Show soft-deleted doctors (admin/staff).
      */
-
     public function trashed()
     {
-    if (!auth()->user()->isAdmin()) {
-        return back()->with('error', 'Unauthorized.');
-    }
+        if (!$this->isAdminOrStaff()) {
+            return back()->with('error', 'Unauthorized.');
+        }
 
-    // onlyTrashed() shows ONLY soft-deleted records
-    $doctors = Doctor::onlyTrashed()
-        ->with(['department'])
-        ->orderBy('deleted_at', 'desc')
-        ->paginate(15);
+        $doctors = Doctor::onlyTrashed()
+            ->with(['department'])
+            ->orderBy('deleted_at', 'desc')
+            ->paginate(15);
 
-    return view('doctors.trashed', compact('doctors'));
+        return view('doctors.trashed', compact('doctors'));
     }
 
     /**
-     * Restore a soft-deleted doctor (admin only).
+     * Restore a soft-deleted doctor (admin/staff).
      */
     public function restore($id)
     {
-    if (!auth()->user()->isAdmin()) {
-        return back()->with('error', 'Only admins can restore doctors.');
-    }
+        if (!$this->isAdminOrStaff()) {
+            return back()->with('error', 'Unauthorized.');
+        }
 
-    $doctor = Doctor::withTrashed()->findOrFail($id);
-    $name   = $doctor->full_name;
+        $doctor = Doctor::withTrashed()->findOrFail($id);
+        $name   = $doctor->full_name;
 
-    DB::transaction(function () use ($doctor) {
-        // Restore the doctor
-        $doctor->restore();
+        Doctor::withTrashed()->where('id', $id)->update(['deleted_at' => null]);
+        User::withTrashed()->where('id', $doctor->user_id)->update(['deleted_at' => null]);
 
-        // Restore the user using the stored user_id directly
-        \App\Models\User::withTrashed()->where('id', $doctor->user_id)->restore();
-    });
-
-    return redirect()->route('doctors.index')
-        ->with('success', "{$name} has been restored successfully.");
+        return redirect()->route('doctors.index')
+            ->with('success', "{$name} has been restored successfully.");
     }
 }

@@ -7,120 +7,162 @@
 
 <div class="max-w-2xl mx-auto">
 
+    {{-- Header --}}
+    <div class="flex items-center justify-between mb-6">
+        <p class="text-sm text-slate-500">Fill in the details below to schedule an appointment.</p>
+        <a href="{{ route('appointments.index') }}"
+           class="text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-xl transition">
+            ← My Appointments
+        </a>
+    </div>
+
+    @if(session('error'))
+    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm mb-5 flex items-center gap-2">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        {{ session('error') }}
+    </div>
+    @endif
+
     <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
 
-        {{-- Header --}}
-        <div class="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5">
+        <div class="bg-gradient-to-r from-blue-600 to-blue-500 px-6 py-5">
             <h2 class="text-white font-semibold text-lg">New Appointment</h2>
-            <p class="text-blue-200 text-sm mt-0.5">Fill in the details to schedule a visit</p>
+            <p class="text-blue-100 text-sm mt-0.5">St. Gabriel Medical Center</p>
         </div>
 
-        <form method="POST" action="{{ route('appointments.store') }}" class="p-6 space-y-5" id="booking-form">
+        <form method="POST" action="{{ route('appointments.store') }}" class="p-6 space-y-6" id="appointment-form">
             @csrf
 
-            {{-- Validation errors --}}
-            @if($errors->any())
-            <div class="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                <p class="text-sm font-medium text-red-700 mb-1">Please fix the following:</p>
-                <ul class="text-sm text-red-600 space-y-0.5">
-                    @foreach($errors->all() as $error)
-                        <li class="flex items-center gap-1">
-                            <span class="w-1 h-1 rounded-full bg-red-400 flex-shrink-0"></span>
-                            {{ $error }}
-                        </li>
-                    @endforeach
-                </ul>
-            </div>
-            @endif
-
-            {{-- Patient (staff/admin see dropdown, patients see themselves) --}}
+            {{-- Admin/Staff: Select Patient --}}
             @if(auth()->user()->isAdmin() || auth()->user()->isStaff())
             <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1.5">
+                <label class="block text-sm font-semibold text-slate-700 mb-2">
                     Patient <span class="text-red-400">*</span>
                 </label>
                 <select name="patient_id" required
-                        class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white @error('patient_id') border-red-300 @enderror">
-                    <option value="">Select a patient...</option>
-                    @foreach($patients as $patient)
-                        <option value="{{ $patient->id }}" {{ old('patient_id') == $patient->id ? 'selected' : '' }}>
-                            {{ $patient->full_name }} ({{ $patient->patient_code }})
+                        class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                    <option value="">Select patient...</option>
+                    @foreach($patients as $pat)
+                        <option value="{{ $pat->id }}" {{ old('patient_id') == $pat->id ? 'selected' : '' }}>
+                            {{ $pat->full_name }} — {{ $pat->patient_code }}
                         </option>
                     @endforeach
                 </select>
-            </div>
-            @else
-            {{-- Patient is logged in; pass their ID automatically --}}
-            <div class="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center gap-3">
-                <div class="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                    {{ strtoupper(substr(auth()->user()->name, 0, 1)) }}
-                </div>
-                <div>
-                    <p class="text-sm font-medium text-slate-800">{{ auth()->user()->name }}</p>
-                    <p class="text-xs text-slate-500">Booking as yourself</p>
-                </div>
+                @error('patient_id')
+                    <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
+                @enderror
             </div>
             @endif
 
-            {{-- Doctor --}}
+            {{-- Step 1: Department --}}
             <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1.5">
-                    Doctor <span class="text-red-400">*</span>
+                <label class="block text-sm font-semibold text-slate-700 mb-2">
+                    <span class="inline-flex items-center gap-2">
+                        <span class="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">1</span>
+                        Select Department <span class="text-red-400">*</span>
+                    </span>
                 </label>
-                <select name="doctor_id" id="doctor-select" required
-                        class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white @error('doctor_id') border-red-300 @enderror"
-                        onchange="loadSlots()">
-                    <option value="">Select a doctor...</option>
-                    @foreach($doctors as $doctor)
-                        <option value="{{ $doctor->id }}" {{ old('doctor_id') == $doctor->id ? 'selected' : '' }}>
-                            {{ $doctor->full_name }} – {{ $doctor->department->name }}
+                <select name="department_id" id="department-select" required
+                        class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                    <option value="">Choose a department...</option>
+                    @foreach($departments as $dept)
+                        <option value="{{ $dept->id }}" {{ old('department_id') == $dept->id ? 'selected' : '' }}>
+                            {{ $dept->name }}
                         </option>
                     @endforeach
                 </select>
             </div>
 
-            {{-- Date --}}
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1.5">
-                    Appointment Date <span class="text-red-400">*</span>
+            {{-- Step 2: Doctor --}}
+            <div id="doctor-section" class="{{ old('department_id') ? '' : 'opacity-50 pointer-events-none' }}">
+                <label class="block text-sm font-semibold text-slate-700 mb-2">
+                    <span class="inline-flex items-center gap-2">
+                        <span class="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">2</span>
+                        Select Doctor <span class="text-red-400">*</span>
+                    </span>
                 </label>
-                <input type="date" name="date" id="date-input"
-                       value="{{ old('date') }}"
-                       min="{{ now()->addDay()->format('Y-m-d') }}"
-                       required
-                       class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 @error('date') border-red-300 @enderror"
-                       onchange="loadSlots()">
-                <p class="text-xs text-slate-400 mt-1">Select a date to see available time slots</p>
+                <select name="doctor_id" id="doctor-select" required
+                        class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                    <option value="">Select a department first...</option>
+                    @foreach($doctors as $doc)
+                        <option value="{{ $doc->id }}" {{ (old('doctor_id') == $doc->id || $selectedDoctorId == $doc->id) ? 'selected' : '' }}>
+                            {{ $doc->full_name }} — {{ $doc->specialization }}
+                        </option>
+                    @endforeach
+                </select>
+                @error('doctor_id')
+                    <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
+                @enderror
             </div>
 
-            {{-- Time Slots (dynamic) --}}
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1.5">
-                    Time Slot <span class="text-red-400">*</span>
+            {{-- Step 3: Date --}}
+            <div id="date-section" class="{{ old('doctor_id') ? '' : 'opacity-50 pointer-events-none' }}">
+                <label class="block text-sm font-semibold text-slate-700 mb-2">
+                    <span class="inline-flex items-center gap-2">
+                        <span class="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">3</span>
+                        Select Date <span class="text-red-400">*</span>
+                    </span>
                 </label>
-                <div id="slots-container">
-                    <p class="text-sm text-slate-400 italic">Select a doctor and date first to see available slots.</p>
+                <input type="date" name="appointment_date" id="date-input"
+                       value="{{ old('appointment_date') }}"
+                       min="{{ now()->format('Y-m-d') }}"
+                       class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                       required>
+                @error('appointment_date')
+                    <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
+                @enderror
+            </div>
+
+            {{-- Step 4: Time Slot --}}
+            <div id="slot-section" class="opacity-50 pointer-events-none">
+                <label class="block text-sm font-semibold text-slate-700 mb-2">
+                    <span class="inline-flex items-center gap-2">
+                        <span class="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">4</span>
+                        Select Time Slot <span class="text-red-400">*</span>
+                    </span>
+                </label>
+
+                {{-- Loading indicator --}}
+                <div id="slots-loading" class="hidden flex items-center gap-2 text-sm text-slate-500 py-3">
+                    <svg class="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                    Loading available slots...
                 </div>
-                <input type="hidden" name="time" id="time-hidden" value="{{ old('time') }}">
+
+                {{-- Slot grid --}}
+                <div id="slots-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    <p class="text-sm text-slate-400 col-span-full italic">Select a doctor and date first.</p>
+                </div>
+
+                {{-- Hidden input that stores selected time --}}
+                <input type="hidden" name="appointment_time" id="selected-time" value="{{ old('appointment_time') }}">
+                @error('appointment_time')
+                    <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
+                @enderror
             </div>
 
-            {{-- Reason --}}
+            {{-- Reason (optional) --}}
             <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1.5">
+                <label class="block text-sm font-semibold text-slate-700 mb-2">
                     Reason for Visit <span class="text-slate-400 font-normal">(optional)</span>
                 </label>
-                <textarea name="reason" rows="3" placeholder="Brief description of symptoms or reason..."
-                          class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none">{{ old('reason') }}</textarea>
+                <textarea name="reason" rows="3"
+                          placeholder="Briefly describe your symptoms or reason for the visit..."
+                          class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none">{{ old('reason') }}</textarea>
             </div>
 
-            {{-- Buttons --}}
-            <div class="flex gap-3 pt-2">
-                <a href="{{ route('appointments.index') }}"
-                   class="flex-1 text-center py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition">
-                    Cancel
-                </a>
-                <button type="submit"
-                        class="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-2.5 rounded-xl text-sm transition-all shadow-lg shadow-blue-500/25 hover:-translate-y-0.5">
+            {{-- Submit --}}
+            <div class="pt-2">
+                <button type="submit" id="submit-btn"
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 rounded-xl transition-all shadow-lg shadow-blue-500/20 hover:-translate-y-0.5 flex items-center justify-center gap-2 text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
                     Book Appointment
                 </button>
             </div>
@@ -130,90 +172,138 @@
 
 @push('scripts')
 <script>
-    let selectedSlot = null;
+const CSRF = document.querySelector('meta[name="csrf-token"]')?.content;
 
-    async function loadSlots() {
-        const doctorId = document.getElementById('doctor-select').value;
-        const date     = document.getElementById('date-input').value;
-        const container = document.getElementById('slots-container');
+// ── Department → load doctors ──────────────────────────────────────────────
+document.getElementById('department-select')?.addEventListener('change', async function () {
+    const deptId      = this.value;
+    const doctorSel   = document.getElementById('doctor-select');
+    const doctorSec   = document.getElementById('doctor-section');
+    const dateSection = document.getElementById('date-section');
+    const slotSection = document.getElementById('slot-section');
 
-        // Reset selection
-        selectedSlot = null;
-        document.getElementById('time-hidden').value = '';
+    // Reset downstream
+    doctorSel.innerHTML = '<option value="">Loading doctors...</option>';
+    document.getElementById('slots-grid').innerHTML = '<p class="text-sm text-slate-400 col-span-full italic">Select a doctor and date first.</p>';
+    document.getElementById('selected-time').value  = '';
+    dateSection.classList.add('opacity-50', 'pointer-events-none');
+    slotSection.classList.add('opacity-50', 'pointer-events-none');
 
-        if (!doctorId || !date) {
-            container.innerHTML = '<p class="text-sm text-slate-400 italic">Select a doctor and date first.</p>';
+    if (!deptId) {
+        doctorSel.innerHTML = '<option value="">Select a department first...</option>';
+        doctorSec.classList.add('opacity-50', 'pointer-events-none');
+        return;
+    }
+
+    doctorSec.classList.remove('opacity-50', 'pointer-events-none');
+
+    try {
+        const res  = await fetch(`/doctors?department_id=${deptId}&json=1`, {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        });
+
+        // Fallback: just fetch doctors for this dept via a simple endpoint
+        const res2 = await fetch(`/appointments/doctors-by-dept?department_id=${deptId}`, {
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF }
+        });
+
+        if (res2.ok) {
+            const data = await res2.json();
+            if (data.doctors && data.doctors.length > 0) {
+                doctorSel.innerHTML = '<option value="">Choose a doctor...</option>' +
+                    data.doctors.map(d => `<option value="${d.id}">${d.full_name} — ${d.specialization}</option>`).join('');
+            } else {
+                doctorSel.innerHTML = '<option value="">No doctors available in this department</option>';
+            }
+        }
+    } catch (e) {
+        doctorSel.innerHTML = '<option value="">Could not load doctors. Try refreshing.</option>';
+    }
+});
+
+// ── Doctor or Date changes → load slots ───────────────────────────────────
+function tryLoadSlots() {
+    const doctorId = document.getElementById('doctor-select')?.value;
+    const date     = document.getElementById('date-input')?.value;
+    const dateSection = document.getElementById('date-section');
+    const slotSection = document.getElementById('slot-section');
+
+    if (doctorId) {
+        dateSection.classList.remove('opacity-50', 'pointer-events-none');
+    }
+
+    if (!doctorId || !date) return;
+
+    slotSection.classList.remove('opacity-50', 'pointer-events-none');
+    loadSlots(doctorId, date);
+}
+
+document.getElementById('doctor-select')?.addEventListener('change', tryLoadSlots);
+document.getElementById('date-input')?.addEventListener('change',    tryLoadSlots);
+
+async function loadSlots(doctorId, date) {
+    const grid    = document.getElementById('slots-grid');
+    const loading = document.getElementById('slots-loading');
+
+    loading.classList.remove('hidden');
+    grid.innerHTML = '';
+    document.getElementById('selected-time').value = '';
+
+    try {
+        const res  = await fetch(`/appointments/slots?doctor_id=${doctorId}&date=${date}`, {
+            headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+
+        loading.classList.add('hidden');
+
+        if (!data.slots || data.slots.length === 0) {
+            grid.innerHTML = `<p class="text-sm text-slate-400 col-span-full italic">${data.message || 'No slots available for this day.'}</p>`;
             return;
         }
 
-        // Loading state
-        container.innerHTML = `
-            <div class="flex items-center gap-2 text-sm text-slate-500">
-                <svg class="animate-spin w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                </svg>
-                Loading available slots...
-            </div>`;
+        grid.innerHTML = data.slots.map(slot => `
+            <button type="button"
+                    onclick="selectSlot('${slot.time}', '${slot.label}', this)"
+                    ${!slot.available ? 'disabled' : ''}
+                    class="slot-btn py-2.5 px-3 rounded-xl border text-sm font-medium transition-all
+                           ${slot.available
+                               ? 'border-slate-200 text-slate-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 cursor-pointer'
+                               : 'border-slate-100 text-slate-300 bg-slate-50 cursor-not-allowed line-through'
+                           }">
+                ${slot.label}
+            </button>
+        `).join('');
 
-        try {
-            const res  = await fetch(`/appointments/slots?doctor_id=${doctorId}&date=${date}`);
-            const data = await res.json();
-
-            if (!data.slots || data.slots.length === 0) {
-                container.innerHTML = `
-                    <div class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
-                        No available slots for this doctor on this date. Try a different date.
-                    </div>`;
-                return;
-            }
-
-            // Render slot buttons
-            const grid = document.createElement('div');
-            grid.className = 'grid grid-cols-3 sm:grid-cols-4 gap-2';
-
-            data.slots.forEach(slot => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.textContent = slot;
-                btn.dataset.slot = slot;
-                btn.className = 'slot-btn py-2 px-3 border border-slate-200 rounded-xl text-sm text-slate-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition-all font-medium';
-                btn.onclick = () => selectSlot(slot, btn);
-                grid.appendChild(btn);
+        // Re-select previously chosen time if any (for validation errors)
+        const prev = '{{ old("appointment_time") }}';
+        if (prev) {
+            document.querySelectorAll('.slot-btn').forEach(btn => {
+                if (btn.dataset?.time === prev || btn.onclick?.toString().includes(prev)) {
+                    btn.click();
+                }
             });
-
-            container.innerHTML = '';
-            container.appendChild(grid);
-
-            // Re-select if user had previously selected (after validation error)
-            const oldTime = '{{ old('time') }}';
-            if (oldTime) {
-                const oldBtn = grid.querySelector(`[data-slot="${oldTime}"]`);
-                if (oldBtn) selectSlot(oldTime, oldBtn);
-            }
-        } catch (e) {
-            container.innerHTML = '<p class="text-sm text-red-500">Failed to load slots. Please try again.</p>';
         }
+
+    } catch (e) {
+        loading.classList.add('hidden');
+        grid.innerHTML = '<p class="text-sm text-red-400 col-span-full">Could not load slots. Please try again.</p>';
     }
+}
 
-    function selectSlot(slot, btn) {
-        // Reset all buttons
-        document.querySelectorAll('.slot-btn').forEach(b => {
-            b.className = 'slot-btn py-2 px-3 border border-slate-200 rounded-xl text-sm text-slate-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition-all font-medium';
-        });
-        // Highlight selected
-        btn.className = 'slot-btn py-2 px-3 border-2 border-blue-600 rounded-xl text-sm text-blue-700 bg-blue-50 font-bold transition-all';
-
-        selectedSlot = slot;
-        document.getElementById('time-hidden').value = slot;
-    }
-
-    // Load slots on page load if values exist (after validation error)
-    window.addEventListener('DOMContentLoaded', () => {
-        const doctor = document.getElementById('doctor-select').value;
-        const date   = document.getElementById('date-input').value;
-        if (doctor && date) loadSlots();
+function selectSlot(time, label, btn) {
+    // Clear previous selection
+    document.querySelectorAll('.slot-btn').forEach(b => {
+        b.classList.remove('bg-blue-600', 'text-white', 'border-blue-600', 'shadow-md');
+        b.classList.add('border-slate-200', 'text-slate-700');
     });
+
+    // Highlight selected
+    btn.classList.remove('border-slate-200', 'text-slate-700');
+    btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600', 'shadow-md');
+
+    document.getElementById('selected-time').value = time;
+}
 </script>
 @endpush
 
