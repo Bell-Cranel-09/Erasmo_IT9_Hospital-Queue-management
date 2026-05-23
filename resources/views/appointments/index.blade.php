@@ -25,6 +25,7 @@
         <div>
             <label class="block text-xs font-medium text-slate-600 mb-1.5">Status</label>
             <select name="status"
+                    onchange="this.form.submit()"
                     class="px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white min-w-[130px]">
                 <option value="">All Statuses</option>
                 <option value="pending"   {{ request('status') == 'pending'   ? 'selected' : '' }}>Pending</option>
@@ -36,6 +37,7 @@
         <div>
             <label class="block text-xs font-medium text-slate-600 mb-1.5">Date</label>
             <input type="date" name="date" value="{{ request('date') }}"
+                   onchange="this.form.submit()"
                    class="px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
         </div>
         <div class="flex gap-2">

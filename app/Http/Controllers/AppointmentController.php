@@ -12,40 +12,64 @@ use Illuminate\Http\Request;
 
 class AppointmentController extends Controller
 {
-    public function index()
-    {
-        $user = auth()->user();
-        if ($user->isPatient()) {
-            $patient      = $user->patient;
-            $appointments = $patient
-                ? $patient->appointments()->with(['doctor.department'])->orderByDesc('appointment_date')->paginate(15)
-                : collect();
-        } else {
-            $appointments = Appointment::with(['patient', 'doctor.department'])
-                ->orderByDesc('appointment_date')->paginate(15);
+ public function index(Request $request)
+{
+    $user = auth()->user();
+
+    if ($user->isPatient()) {
+        $patient = $user->patient;
+        $query   = $patient
+            ? $patient->appointments()->with(['doctor.department'])
+            : Appointment::whereRaw('0=1'); // empty query fallback
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
         }
-        return view('appointments.index', compact('appointments'));
+
+        if ($request->filled('date')) {
+            $query->whereDate('appointment_date', $request->date);
+        }
+
+        $appointments = $query->orderByDesc('appointment_date')->paginate(15)->withQueryString();
+
+    } else {
+        $query = Appointment::with(['patient', 'doctor.department']);
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('date')) {
+            $query->whereDate('appointment_date', $request->date);
+        }
+
+        $appointments = $query->orderByDesc('appointment_date')->paginate(15)->withQueryString();
     }
 
-    public function create(Request $request)
-    {
-        $departments      = Department::where('is_active', true)->get();
-        $doctors          = collect();
-        $patients         = collect();
-        $selectedDoctorId = $request->get('doctor_id');
+    return view('appointments.index', compact('appointments'));
+}
 
-        if (auth()->user()->isAdmin() || auth()->user()->isStaff()) {
-            $patients = Patient::whereNull('deleted_at')->orderBy('first_name')->get();
-        }
+public function create(Request $request)
+{
+    $departments      = Department::where('is_active', true)->get();
+    $doctors          = collect();
+    $patients         = collect();
+    $selectedDoctorId = $request->get('doctor_id');
 
-        if ($request->filled('department_id')) {
-            $doctors = Doctor::where('department_id', $request->department_id)
-                ->whereNull('deleted_at')->get();
-        }
-
-        return view('appointments.create', compact('departments','doctors','patients','selectedDoctorId'));
+    if (auth()->user()->isAdmin() || auth()->user()->isStaff()) {
+        $patients = Patient::whereNull('deleted_at')->orderBy('first_name')->get();
     }
 
+    if ($request->filled('department_id')) {
+        $doctors = Doctor::where('department_id', $request->department_id)
+            ->whereNull('deleted_at')
+            ->get();
+    }
+
+    return view('appointments.create', compact(
+        'departments', 'doctors', 'patients', 'selectedDoctorId'
+    ));
+}
     /**
      * AJAX — get doctors for a department (used by the booking form dropdown).
      */
