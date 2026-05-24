@@ -182,17 +182,23 @@ public function create(Request $request)
 
     public function confirm(Appointment $appointment)
     {
-        $appointment->update(['status' => 'confirmed']);
-        return back()->with('success', 'Appointment confirmed.');
+    if ($appointment->status === 'completed') {
+        return back()->with('error', 'Cannot change the status of a completed appointment.');
+    }
+    $appointment->update(['status' => 'confirmed']);
+    return back()->with('success', 'Appointment confirmed.');
     }
 
-    public function cancel(Appointment $appointment)
+   public function cancel(Appointment $appointment)
     {
-        $user = auth()->user();
-        if ($user->isPatient() && $appointment->patient_id !== $user->patient->id) {
-            return back()->with('error', 'Unauthorized.');
-        }
-        $appointment->update(['status' => 'canceled']);
-        return back()->with('success', 'Appointment canceled.');
+    $user = auth()->user();
+    if ($user->isPatient() && $appointment->patient_id !== $user->patient->id) {
+        return back()->with('error', 'Unauthorized.');
     }
+    if ($appointment->status === 'completed') {
+        return back()->with('error', 'Cannot cancel a completed appointment.');
+    }
+    $appointment->update(['status' => 'canceled']);
+    return back()->with('success', 'Appointment canceled.');
+    } 
 }
