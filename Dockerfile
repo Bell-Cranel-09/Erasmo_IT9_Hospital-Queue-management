@@ -42,23 +42,21 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Copy composer files first
-COPY composer.json composer.lock ./
-
-RUN composer install --no-dev --optimize-autoloader --no-interaction
-
-# Copy package files first
-COPY package*.json ./
-
-RUN npm install
-
-# Copy rest of app
+# =========================================================================
+# THE REPAIR FIX: Copy absolute framework and source structures into place
+# =========================================================================
 COPY . .
 
-# Build Vite
+# Now composer has full access to the 'artisan' file to build its autoload maps smoothly
+RUN composer install --no-dev --optimize-autoloader --no-interaction
+
+# Now npm install has full access to your config directories to build assets
+RUN npm install
+
+# Build Vite configurations
 RUN npm run build
 
-# Laravel setup
+# Laravel setup permissions and links
 RUN php artisan storage:link || true
 
 RUN mkdir -p storage/framework/cache \
@@ -72,3 +70,4 @@ RUN mkdir -p storage/framework/cache \
 EXPOSE 10000
 
 CMD ["apache2-foreground"]
+deb.nodesource.com
