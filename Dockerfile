@@ -70,4 +70,3 @@ RUN mkdir -p storage/framework/cache \
 EXPOSE 10000
 
 CMD ["apache2-foreground"]
-deb.nodesource.com
